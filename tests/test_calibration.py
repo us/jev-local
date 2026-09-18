@@ -3,7 +3,29 @@ import math
 import pytest
 
 from jevlocal.calibration import ece, fit_temperature, nll, softmax
-from jevlocal.scorer import HfLogprobScorer, ScorerError
+from jevlocal.scorer import HfLogprobScorer, ScorerError, default_temperatures
+
+
+def test_default_temperatures_known_and_fallback():
+    assert default_temperatures("Qwen/Qwen3.5-9B", False) == {"choice": 0.5, "noul": 0.25, "score": 0.25}
+    assert default_temperatures("Qwen/Qwen3.5-9B", True) == {"choice": 1.0, "noul": 0.25, "score": 0.25}
+    assert default_temperatures("Qwen/Qwen2.5-3B-Instruct", True)["choice"] == 1.5
+    fb = default_temperatures("Some/Unknown-1B", False)
+    assert set(fb) == {"choice", "noul", "score"} and all(t > 0 for t in fb.values())
+    fb2 = default_temperatures("Some/Unknown-1B", True)
+    assert set(fb2) == {"choice", "noul", "score"}
+    # returned dict is a copy: mutating it must not poison the table
+    fb["choice"] = 99.0
+    assert default_temperatures("Some/Unknown-1B", False)["choice"] == 1.0
+
+
+def test_maybe_wrap_chat_falls_back_without_template():
+    s = HfLogprobScorer.__new__(HfLogprobScorer)
+    s.chat = True
+    s.tok = type("T", (), {"chat_template": None})()
+    assert s.maybe_wrap_chat("hello") == "hello"
+    s.chat = False
+    assert s.maybe_wrap_chat("hello") == "hello"
 
 
 def test_softmax_sums_to_one_and_temperature_sharpens():

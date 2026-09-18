@@ -18,7 +18,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["POST", "
 def _get_scorer():
     if os.getenv("JEVLOCAL_SCORER") == "hf":
         from .scorer import HfLogprobScorer
-        return HfLogprobScorer(model_id=os.getenv("JEVLOCAL_MODEL", "Qwen/Qwen2.5-0.5B-Instruct"))
+        return HfLogprobScorer(
+            model_id=os.getenv("JEVLOCAL_MODEL", "Qwen/Qwen3.5-9B"),
+            chat=os.getenv("JEVLOCAL_CHAT", "0") == "1")
     return DeterministicStubScorer()
 
 

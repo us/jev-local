@@ -30,6 +30,29 @@ class ScorerError(ValueError):
 
 MAX_INPUT_TOKENS = 4096
 
+# Per-model temperatures, NLL-best on set1 eval (seed 99).
+# chat=False (plain prompt) and chat=True (instruct chat template wrap).
+# Set1 n=119; set3 (n=1316, harder) confirms plain-9B overall 0.832.
+# Chat-wrap lifts set1 a lot (9B overall ~0.95, 3B ~0.95) but on set3 it is
+# mixed (9B chat 0.807 vs plain 0.832: score up, noul down), so chat stays
+# opt-in via JEVLOCAL_CHAT=1. Numbers in README.
+_PLAIN_TEMPS = {
+    "Qwen/Qwen3.5-9B": {"choice": 0.5, "noul": 0.25, "score": 0.25},
+}
+_CHAT_TEMPS = {
+    "Qwen/Qwen3.5-9B": {"choice": 1.0, "noul": 0.25, "score": 0.25},
+    "Qwen/Qwen2.5-3B-Instruct": {"choice": 1.5, "noul": 0.25, "score": 0.25},
+}
+_FALLBACK_PLAIN = {"choice": 1.0, "noul": 1.0, "score": 1.0}
+_FALLBACK_CHAT = {"choice": 1.0, "noul": 0.25, "score": 0.25}
+
+
+def default_temperatures(model_id: str, chat: bool) -> dict:
+    """Pure helper: shipped T defaults for a model/mode. Test-covered."""
+    if chat:
+        return dict(_CHAT_TEMPS.get(model_id, _FALLBACK_CHAT))
+    return dict(_PLAIN_TEMPS.get(model_id, _FALLBACK_PLAIN))
+
 
 class DeterministicStubScorer:
     """Hash-based stub. Deterministic, valid shapes, no intelligence claimed."""
@@ -81,36 +104,50 @@ class HfLogprobScorer:
       `key means: desc` context lines; the demanded answer format is the bare
       key, which is exactly what gets scored.
     - score: candidates are bare level digits `0..n` (variant B wins:
-      onyx decision set, Qwen3-4B: digits 0.76 vs 'Level i' 0.67 vs label
+      decision set, Qwen3-4B: digits 0.76 vs 'Level i' 0.67 vs label
       text 0.59). 0-indexed to match the docs example (legend {"0":...},
       score = sum(i * p)). Linear-ordinal assumption.
     - confidence: max-probability, documented baseline.
     """
 
     def __init__(self, model_id: str = "Qwen/Qwen3.5-9B",
-                 temperatures: dict | None = None):
+                 temperatures: dict | None = None, chat: bool = False):
         try:
             from transformers import AutoModelForCausalLM, AutoTokenizer
         except ImportError as e:
             raise ImportError("HfLogprobScorer needs the 'hf' extra: pip install -e '.[hf]'") from e
         self.model_name = model_id
-        # Defaults fitted on onyx, Qwen3.5-9B, set1 eval split (seed 99):
-        # T sweep 0.25..2.0, NLL-best per head. choice T=0.5 (NLL 0.298,
-        # meanmax 0.90); noul T=0.25 (NLL 0.108, meanmax 0.94); score
-        # T=0.25 (NLL 0.257, meanmax 0.83). T=1.0 is worse on NLL for
-        # all three heads. Confirmed held-out on set2 eval (NEW beats OLD
-        # on NLL at tied acc) and on set3 eval-half (n=1316, overall
-        # 0.832 [0.811, 0.851]). Verbalizer variants V0..V3 tested on
-        # set1+set2 choice-eval: V0 (shipped) best on average, keep.
+        self.chat = chat
+        # Plain defaults fitted on set1 eval (seed 99), T sweep 0.25..2.0,
+        # NLL-best per head; confirmed held-out on set2 eval and on set3
+        # eval-half (n=1316, overall 0.832 [0.811, 0.851]). Chat defaults
+        # from the chat T sweep (see default_temperatures). Verbalizer
+        # variants V0..V3 tested on set1+set2 choice-eval: V0 shipped.
         # Known wording effect: payout-failure routes technical under
         # neutral criteria, billing when criteria say billing owns
         # failures; ambiguous case, documented in README.
-        defaults = {"choice": 0.5, "noul": 0.25, "score": 0.25}
+        defaults = default_temperatures(model_id, chat)
         self.temperatures = defaults | (temperatures or {})
-        self.tok = AutoTokenizer.from_pretrained(model_id)
+        self.tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        # trust_remote_code: Qwen3-family tokenizers need it; model_id comes
+        # only from operator env (JEVLOCAL_MODEL), never from requests.
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_id, dtype="auto", device_map="auto")
+            model_id, dtype="auto", device_map="auto", trust_remote_code=True)
         self.model.eval()
+
+    def maybe_wrap_chat(self, body: str) -> str:
+        """Wrap prompt as a user turn when chat mode is on and the
+        tokenizer has a chat template. Plain fallback otherwise."""
+        if not self.chat or getattr(self.tok, "chat_template", None) is None:
+            return body
+        try:
+            return self.tok.apply_chat_template(
+                [{"role": "user", "content": body}], tokenize=False,
+                add_generation_prompt=True, enable_thinking=False)
+        except TypeError:
+            return self.tok.apply_chat_template(
+                [{"role": "user", "content": body}], tokenize=False,
+                add_generation_prompt=True)
 
     def candidate_scores(self, prefix: str, candidates: list[str]) -> tuple[list[float], list[int]]:
         """Mean logprob per candidate over candidate tokens only.
@@ -176,7 +213,7 @@ class HfLogprobScorer:
         if q.criteria and q.criteria.get("true") and q.criteria.get("false"):
             help_ = {"true": str(q.criteria["true"]), "false": str(q.criteria["false"])}
         prefix = self.render_prefix(str(state), str(q.instructions), ["Yes", "No"], None, None, help_)
-        means, _ = self.candidate_scores(prefix, ["Yes", "No"])
+        means, _ = self.candidate_scores(self.maybe_wrap_chat(prefix), ["Yes", "No"])
         p = self._dist("noul", means)[0]
         return NoulAnswer(type="noul", noul=round(p, 4))
 
@@ -186,7 +223,7 @@ class HfLogprobScorer:
             raise ScorerError("choice criteria must not be empty")
         help_ = {k: str(v) for k, v in q.criteria.items() if v is not None}
         prefix = self.render_prefix(str(state), str(q.instructions), options, help_ or None, None)
-        means, _ = self.candidate_scores(prefix, options)
+        means, _ = self.candidate_scores(self.maybe_wrap_chat(prefix), options)
         probs = self._dist("choice", means)
         best = options[probs.index(max(probs))]
         return ChoiceAnswer(
@@ -200,7 +237,7 @@ class HfLogprobScorer:
             raise ScorerError("score criteria must not be empty")
         cands = [str(i) for i in range(len(levels))]
         prefix = self.render_prefix(str(state), str(q.instructions), cands, None, levels)
-        means, _ = self.candidate_scores(prefix, cands)
+        means, _ = self.candidate_scores(self.maybe_wrap_chat(prefix), cands)
         probs = self._dist("score", means)
         value = sum(i * p for i, p in enumerate(probs))
         return ScoreAnswer(

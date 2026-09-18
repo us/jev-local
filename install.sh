@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # One-line installer for jev-local:
 #   curl -fsSL https://raw.githubusercontent.com/us/jev-local/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/us/jev-local/main/install.sh | bash -s -- --light
 #
 # Clones (or reuses) the repo, starts the API with Docker Compose,
 # waits for /health, runs a smoke test, prints usage.
+# --light: 3B model (~6GB RAM, Mac-friendly) instead of the 9B default.
 set -euo pipefail
 
 REPO_URL="https://github.com/us/jev-local.git"
 DIR="${JEVLOCAL_DIR:-$HOME/jev-local}"
 PORT="${PORT:-8000}"
+LIGHT=0
+for arg in "${@:-}"; do
+  if [ "$arg" = "--light" ]; then LIGHT=1; fi
+done
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1 (please install it first)" >&2; exit 1; }; }
 need git
@@ -23,6 +29,12 @@ else
   git clone --depth 1 "$REPO_URL" "$DIR"
 fi
 cd "$DIR"
+
+if [ "$LIGHT" = "1" ]; then
+  echo "-> light mode: 3B model"
+  JEVLOCAL_MODEL="Qwen/Qwen2.5-3B-Instruct"
+  export JEVLOCAL_MODEL
+fi
 
 echo "-> starting jev-local on port $PORT"
 PORT="$PORT" docker compose up -d --build

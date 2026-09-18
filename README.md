@@ -39,12 +39,44 @@ uv run uvicorn jevlocal.app:app --port 8000
 
 Docker: `docker build -t jev-local . && docker run -p 8000:8000 jev-local`
 
-With a real model (needs GPU + `.[hf]` extra):
+With a real model (`.[hf]` extra):
 
 ```bash
 JEVLOCAL_SCORER=hf JEVLOCAL_MODEL=Qwen/Qwen3.5-9B \
   uv run uvicorn jevlocal.app:app --port 8000
 ```
+
+## Light vs full
+
+Full (default) is Qwen3.5-9B (~18GB weights, needs a GPU box or a
+24GB+ machine). Light is Qwen2.5-3B-Instruct (~6GB, fits a 16GB Mac):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/us/jev-local/main/install.sh | bash -s -- --light
+# or manually: JEVLOCAL_MODEL=Qwen/Qwen2.5-3B-Instruct JEVLOCAL_SCORER=hf ...
+```
+
+`JEVLOCAL_CHAT=1` wraps the prompt in the model's native chat template.
+It lifts set1 a lot but is mixed on the harder set3, so it stays opt-in.
+
+Small-model leaderboard, set1 eval-half (seed 99, Wilson 95% CI on accuracy):
+
+| model | size | choice | noul | score | overall~ |
+|---|---|---|---|---|---|
+| Qwen2.5-3B-Instruct (chat) | 3B | 0.90 [0.77,0.96] | 1.00 | 0.95 [0.83,0.99] | 0.95 |
+| Qwen2.5-1.5B-Instruct (chat) | 1.5B | 0.83 [0.68,0.91] | 1.00 | 0.59 [0.43,0.73] | 0.81 |
+| SmolLM3-3B (chat) | 3B | 0.73 [0.57,0.84] | 1.00 | 0.72 [0.56,0.83] | 0.82 |
+| Qwen3.5-2B (chat) | 2B | 0.55 | 0.90 | 0.69 | 0.71 |
+| Qwen2.5-0.5B-Instruct (chat) | 0.5B | 0.38 | 0.80 | 0.31 | 0.50 |
+| SmolLM2-1.7B-Instruct (chat) | 1.7B | 0.30 | 0.55 | 0.31 | 0.39 |
+| Qwen3-0.6B/1.7B | 0.6-1.7B | 0.63 | 0.55 | 0.51 | 0.56 |
+
+Set3 confirmation (harder, n=1316, chat): 3B overall 0.78
+(choice 0.73, noul 0.94, score 0.70); 9B chat 0.81
+(choice 0.80, noul 0.81, score 0.81) vs 9B plain 0.83.
+Dropped: 0.5B and SmolLM2-1.7B are too weak for choice/score;
+Qwen3 hybrids don't fit this scoring method; Gemma/Llama-3.2 need
+gated access and were skipped.
 
 Open `demo/index.html` in a browser for a minimal UI.
 
@@ -61,7 +93,7 @@ score 2..10 levels, noul criteria keys true/false only.
 | Qwen2.5-0.5B-Instruct | 0.50 | 0.86 | 0.135 | 0.05s | 1 |
 | Qwen3-4B | 0.67 | 0.53 | 0.146 | 0.14s | 0 |
 
-Measured on NVIDIA GB10, transformers direct forward pass, per-candidate
+Measured with a direct transformers forward pass, per-candidate
 mean logprob + softmax, no generation. Pilot only: n=24 cannot support a
 go/no-go claim; the decision set needs 150-300 held-out items with CIs.
 
@@ -89,7 +121,7 @@ stays 1.0).
 ## Drop-in proof
 
 Official `typesafe-sdk==0.6.0` with only `base_url` pointed at our server
-(backed by Qwen3-4B on GB10): SSO lockout case returned technical 1.0,
+(4B backend): SSO lockout case returned technical 1.0,
 urgent 0.9993, frustration 1.10 in ~0.7s over an SSH tunnel. CORS enabled
 for the browser demo (verified in headless Chrome: page load -> fetch ->
 200 -> rendered; use 127.0.0.1, not localhost).
@@ -137,7 +169,7 @@ constraints; clear cases must name their category.
 ## Head-to-head vs real Jev (Cloudflare-published jev-1.13.0 outputs)
 
 Same 5 questions asked to published Jev outputs and to our server
-(Qwen3.5-9B, GB10). 4/5 agree on the top answer.
+(Qwen3.5-9B). 4/5 agree on the top answer.
 
 | # | question | real Jev | jev-local T=1.0/3.0 (old) | jev-local T=0.5/0.25/0.25 (new) |
 |---|---|---|---|---|
