@@ -1,0 +1,24 @@
+[project]
+name = "jev-local"
+version = "0.1.0"
+description = "Local Jev-compatible evaluation server (System One interface, open weights)"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.115",
+  "pydantic>=2.7",
+  "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8", "httpx>=0.28"]
+hf = ["transformers>=4.48", "torch"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

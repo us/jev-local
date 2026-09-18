@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>jev-local demo</title></head>
+<body>
+<h1>jev-local demo (needs server on localhost:8000)</h1>
+<textarea id="state" rows="4" cols="70">Payouts failing for 3 days, losing sales, help ASAP.</textarea><br>
+<button onclick="ask()">Ask</button>
+<pre id="out"></pre>
+<script>
+async function ask() {
+  const r = await fetch("http://127.0.0.1:8000/v1/systemone", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({state: document.getElementById("state").value,
+      model: "jev-latest",
+      questions: {
+        is_urgent: {type: "noul", instructions: "Does this convey urgency?"},
+        department: {type: "choice", instructions: "Which team?",
+          criteria: {billing: "Payments", technical: "Bugs", sales: "Pricing"}}}})
+  });
+  document.getElementById("out").textContent = JSON.stringify(await r.json(), null, 1);
+}
+</script>
+</body>
+</html>
