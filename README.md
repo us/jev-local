@@ -78,6 +78,25 @@ Dropped: 0.5B and SmolLM2-1.7B are too weak for choice/score;
 Qwen3 hybrids don't fit this scoring method; Gemma/Llama-3.2 need
 gated access and were skipped.
 
+## Micro tier (<1GB): tested, not shipped
+
+Six sub-1.5B open models on set1 eval (chat-wrapped). Best micro overall
+is 0.56 (LFM2-1.2B); the rest sit at 0.35-0.50. Choice/score collapse
+below ~1B params with this method, so there is no micro tier. Floor for
+real use stays 1.5B.
+
+| model | size | choice | noul | score | overall~ |
+|---|---|---|---|---|---|
+| LFM2-1.2B | 1.2B | 0.38 | 0.60 | 0.72 | 0.56 |
+| SmolLM2-360M-Instruct | 360M | 0.50 | 0.55 | 0.44 | 0.50 |
+| Qwen2.5-0.5B-Instruct | 0.5B | 0.38 | 0.80 | 0.31 | 0.50 |
+| LFM2-350M | 350M | 0.30 | 0.55 | 0.49 | 0.45 |
+| Qwen3.5-0.8B | 0.8B | 0.40 | 0.60 | 0.31 | 0.44 |
+| SmolLM2-135M-Instruct | 135M | 0.30 | 0.55 | 0.31 | 0.39 |
+| Falcon-H1-0.5B-Instruct | 0.5B | 0.30 | 0.45 | 0.31 | 0.35 |
+
+Gemma-3-270M-it would have been a candidate but is gated.
+
 Open `demo/index.html` in a browser for a minimal UI.
 
 ## API
