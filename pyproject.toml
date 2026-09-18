@@ -13,6 +13,9 @@ dependencies = [
 test = ["pytest>=8", "httpx>=0.28"]
 hf = ["transformers>=4.48", "torch"]
 
+[project.scripts]
+jev-local-serve = "jevlocal.__main__:main"
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"

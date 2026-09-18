@@ -4,6 +4,27 @@ Local Jev-compatible evaluation server: `POST /v1/systemone` with typed
 `noul` / `choice` / `score` questions, probabilities, and confidence.
 No waitlist, no API key, no closed weights.
 
+## One-line install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/us/jev-local/main/install.sh | bash
+```
+
+This clones the repo to `~/jev-local`, starts the API on
+`http://127.0.0.1:8000` via Docker Compose, waits for health and runs a
+smoke test. Afterwards:
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/systemone \
+  -H 'Content-Type: application/json' \
+  -d '{"state":"Payouts failing for 3 days, help ASAP.","model":"jev-latest",
+       "questions":{"u":{"type":"noul","instructions":"Does this convey urgency?"}}}'
+```
+
+Or point the official SDK at it with
+`base_url="http://127.0.0.1:8000"`. No Docker? `pip install .` then
+`jev-local-serve --port 8000`.
+
 Status: working server + contract tests. Default scorer is deterministic and
 carries no intelligence; set `JEVLOCAL_SCORER=hf` for the real frozen-model
 logprob scorer.

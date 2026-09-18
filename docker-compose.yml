@@ -1,0 +1,13 @@
+services:
+  jev-local:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - JEVLOCAL_SCORER=${JEVLOCAL_SCORER:-}
+      - JEVLOCAL_MODEL=${JEVLOCAL_MODEL:-Qwen/Qwen3.5-9B}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
